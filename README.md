@@ -59,7 +59,7 @@ API ドキュメント（自動生成）は `http://localhost:8000/docs`。
 2) Render で “New Web Service” → リポジトリを選択。
 
 - Build Command: `pip install -r questionform/requirements.txt`
-- Start Command: `uvicorn questionform.app:app --host 0.0.0.0 --port $PORT`
+- Start Command: `cd questionform && uvicorn app:app --host 0.0.0.0 --port $PORT`
 - Environment → `ADMIN_TOKEN` を設定。
 
 3) デプロイ URL を参加者に共有。
@@ -69,4 +69,3 @@ API ドキュメント（自動生成）は `http://localhost:8000/docs`。
 - 乱用対策: 必要に応じて投稿間隔の制限、NGワードフィルタを追加してください。
 - 匿名性: IP などはホスティング側ログに残る可能性があります。告知文面で明示を推奨。
 - バックアップ: `data.db` は単一ファイルなので定期コピーでバックアップできます。
-
