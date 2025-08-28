@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>匿名Q&A</title>
+  <style>
+    :root { --bg:#0b1020; --fg:#e7ecf3; --muted:#9aa6b2; --accent:#4cc9f0; --card:#151b2f; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif; background:var(--bg); color:var(--fg); }
+    header { padding:16px; border-bottom:1px solid #223; }
+    main { max-width:900px; margin:24px auto; padding:0 16px; }
+    .card { background:var(--card); border:1px solid #223; border-radius:10px; padding:16px; }
+    textarea { width:100%; height:100px; padding:10px; border-radius:8px; border:1px solid #334; background:#0f1528; color:var(--fg); resize:vertical; }
+    button { background:var(--accent); color:#03121a; border:none; border-radius:8px; padding:10px 16px; font-weight:600; cursor:pointer; }
+    button.secondary { background:#263148; color:var(--fg); }
+    .row { display:flex; gap:12px; align-items:center; }
+    .space { height:16px; }
+    .list { margin-top:16px; display:flex; flex-direction:column; gap:12px; }
+    .q { background:#0f1528; border:1px solid #243049; border-radius:10px; padding:12px; display:flex; gap:12px; justify-content:space-between; align-items:flex-start; }
+    .q-text { white-space:pre-wrap; word-break:break-word; }
+    .q-actions { display:flex; gap:8px; align-items:center; }
+    .muted { color:var(--muted); font-size:12px; }
+    .admin { margin-top:16px; }
+    .pill { background:#1a2238; padding:6px 10px; border-radius:999px; color:var(--muted); font-size:12px; }
+    .right { margin-left:auto; }
+    @media (max-width: 640px){ .row { flex-direction:column; align-items:stretch; } .right { margin-left:0; } }
+  </style>
+  <script>
+    const API = '/api';
+    let order = localStorage.getItem('order') || 'new';
+    let adminToken = localStorage.getItem('adminToken') || '';
+
+    function setOrder(v){ order = v; localStorage.setItem('order', v); refresh(); }
+    function setAdminToken(v){ adminToken = v; localStorage.setItem('adminToken', v); render(); }
+
+    async function postJSON(url, body, headers={}){
+      const res = await fetch(url, { method:'POST', headers: { 'Content-Type':'application/json', ...headers }, body: JSON.stringify(body) });
+      if(!res.ok){ const e = await res.json().catch(()=>({detail: res.statusText})); throw new Error(e.detail || 'エラー'); }
+      return res.json();
+    }
+    async function postNoBody(url, headers={}){
+      const res = await fetch(url, { method:'POST', headers });
+      if(!res.ok){ const e = await res.json().catch(()=>({detail: res.statusText})); throw new Error(e.detail || 'エラー'); }
+      return res.json();
+    }
+    async function del(url, headers={}){
+      const res = await fetch(url, { method:'DELETE', headers });
+      if(!res.ok){ const e = await res.json().catch(()=>({detail: res.statusText})); throw new Error(e.detail || 'エラー'); }
+      return res.json();
+    }
+
+    async function submitQuestion(){
+      const ta = document.getElementById('qtext');
+      const text = ta.value.trim();
+      if(!text){ alert('質問を入力してください'); return; }
+      try {
+        await postJSON(`${API}/questions`, { text });
+        ta.value='';
+        refresh();
+      } catch(e){ alert(e.message); }
+    }
+
+    async function vote(id){
+      try{ await postNoBody(`${API}/questions/${id}/vote`); refresh(); } catch(e){ alert(e.message); }
+    }
+    async function hideQ(id){
+      if(!adminToken){ alert('管理トークンを入力してください'); return; }
+      try{ await postNoBody(`${API}/questions/${id}/hide`, { 'X-Admin-Token': adminToken }); refresh(); } catch(e){ alert(e.message); }
+    }
+    async function unhideQ(id){
+      if(!adminToken){ alert('管理トークンを入力してください'); return; }
+      try{ await postNoBody(`${API}/questions/${id}/unhide`, { 'X-Admin-Token': adminToken }); refresh(); } catch(e){ alert(e.message); }
+    }
+    async function delQ(id){
+      if(!adminToken){ alert('管理トークンを入力してください'); return; }
+      if(!confirm('この質問を削除しますか？')) return;
+      try{ await del(`${API}/questions/${id}`, { 'X-Admin-Token': adminToken }); refresh(); } catch(e){ alert(e.message); }
+    }
+
+    async function refresh(){
+      const includeHidden = !!adminToken;
+      const res = await fetch(`${API}/questions?order=${order}&include_hidden=${includeHidden}`);
+      const data = await res.json();
+      renderList(data);
+    }
+
+    function fmt(ts){ try{ return new Date(ts).toLocaleString(); }catch{ return ts; } }
+
+    function renderList(items){
+      const list = document.getElementById('list');
+      list.innerHTML = '';
+      if(items.length === 0){ list.innerHTML = '<div class="muted">まだ質問はありません。</div>'; return; }
+      for(const q of items){
+        const el = document.createElement('div');
+        el.className = 'q';
+        const left = document.createElement('div');
+        left.style.flex = '1';
+        left.innerHTML = `<div class="q-text">${escapeHtml(q.text)}</div>` +
+          `<div class="muted">#${q.id} / 票: ${q.votes} / ${fmt(q.created_at)}${q.hidden ? ' / 非表示' : ''}</div>`;
+        const actions = document.createElement('div');
+        actions.className = 'q-actions';
+        const btnUp = document.createElement('button'); btnUp.textContent = `👍 票を入れる (${q.votes})`; btnUp.onclick=()=>vote(q.id);
+        actions.appendChild(btnUp);
+        if(adminToken){
+          const btnHide = document.createElement('button'); btnHide.className='secondary'; btnHide.textContent = q.hidden ? '表示に戻す' : '非表示'; btnHide.onclick=()=> (q.hidden ? unhideQ(q.id) : hideQ(q.id));
+          const btnDel = document.createElement('button'); btnDel.className='secondary'; btnDel.textContent = '削除'; btnDel.onclick=()=>delQ(q.id);
+          actions.appendChild(btnHide); actions.appendChild(btnDel);
+        }
+        el.appendChild(left); el.appendChild(actions);
+        list.appendChild(el);
+      }
+    }
+
+    function render(){
+      document.getElementById('order-new').className = order==='new' ? 'pill' : 'muted pill';
+      document.getElementById('order-top').className = order==='top' ? 'pill' : 'muted pill';
+      document.getElementById('adminToken').value = adminToken;
+    }
+
+    function escapeHtml(str){
+      return str.replace(/[&<>"]/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s]));
+    }
+
+    setInterval(refresh, 5000);
+    window.addEventListener('load', ()=>{ render(); refresh(); });
+  </script>
+</head>
+<body>
+  <header>
+    <div style="max-width:900px;margin:0 auto;padding:0 16px;display:flex;align-items:center;gap:12px;">
+      <div style="font-weight:800;">匿名Q&A</div>
+      <a href="/projector" class="right" style="color:var(--accent);text-decoration:none;">投影用画面 →</a>
+    </div>
+  </header>
+  <main>
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:8px;">質問を投稿</div>
+      <textarea id="qtext" maxlength="500" placeholder="質問を入力（500文字まで）"></textarea>
+      <div class="row" style="margin-top:8px;">
+        <div class="muted">スパム防止のため管理側で非表示・削除される場合があります。</div>
+        <div class="right">
+          <button onclick="submitQuestion()">質問を送信</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="space"></div>
+
+    <div class="row">
+      <div id="order-new" class="pill" onclick="setOrder('new')">新着順</div>
+      <div id="order-top" class="muted pill" onclick="setOrder('top')">投票順</div>
+      <div class="right admin">
+        <input id="adminToken" type="password" placeholder="管理トークン" style="background:#0f1528;border:1px solid #334;border-radius:8px;padding:8px;color:var(--fg);" oninput="setAdminToken(this.value)" />
+      </div>
+    </div>
+
+    <div class="list" id="list"></div>
+  </main>
+</body>
+</html>
+

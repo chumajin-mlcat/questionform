@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>投影用 - 匿名Q&A</title>
+  <style>
+    :root { --bg:#000511; --fg:#e7ecf3; --muted:#9aa6b2; --accent:#4cc9f0; --card:#0c1224; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif; background:var(--bg); color:var(--fg); }
+    main { max-width:1200px; margin:24px auto; padding:0 16px; }
+    .q { background:var(--card); border:1px solid #223; border-radius:12px; padding:16px; margin-bottom:12px; }
+    .q .meta { color:var(--muted); font-size:14px; }
+    .q .text { font-size:22px; line-height:1.4; white-space:pre-wrap; word-break:break-word; }
+    header { padding:16px; border-bottom:1px solid #223; display:flex; align-items:center; gap:12px; }
+    .pill { background:#1a2238; padding:6px 10px; border-radius:999px; color:var(--muted); font-size:12px; cursor:pointer; }
+  </style>
+  <script>
+    const API = '/api';
+    let dense = false;
+    let limit = 50;
+
+    function toggleDense(){ dense = !dense; render(); refresh(); }
+    function setLimit(v){ limit = v; refresh(); }
+
+    function escapeHtml(str){
+      return str.replace(/[&<>"]/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s]));
+    }
+
+    async function refresh(){
+      const res = await fetch(`${API}/questions?order=top&include_hidden=false`);
+      const data = await res.json();
+      renderList(data.slice(0, limit));
+    }
+
+    function render(){
+      document.getElementById('dense').textContent = dense ? '行間: 狭' : '行間: 広';
+      document.body.style.setProperty('--q-line-height', dense ? '1.2' : '1.4');
+    }
+
+    function renderList(items){
+      const box = document.getElementById('box');
+      box.innerHTML = '';
+      for(const q of items){
+        const el = document.createElement('div'); el.className='q';
+        const text = document.createElement('div'); text.className='text'; text.style.lineHeight = getComputedStyle(document.body).getPropertyValue('--q-line-height') || '1.4'; text.innerHTML = escapeHtml(q.text);
+        const meta = document.createElement('div'); meta.className='meta'; meta.textContent = `#${q.id} / 票: ${q.votes}`;
+        el.appendChild(text); el.appendChild(meta);
+        box.appendChild(el);
+      }
+    }
+
+    setInterval(refresh, 5000);
+    window.addEventListener('load', ()=>{ render(); refresh(); });
+  </script>
+</head>
+<body>
+  <header>
+    <div style="font-weight:800;">投影用 - 匿名Q&A</div>
+    <div id="dense" class="pill" onclick="toggleDense()">行間: 広</div>
+    <div class="pill" onclick="setLimit(25)">表示数:25</div>
+    <div class="pill" onclick="setLimit(50)">表示数:50</div>
+    <div class="pill" onclick="setLimit(100)">表示数:100</div>
+  </header>
+  <main>
+    <div id="box"></div>
+  </main>
+</body>
+</html>
+
